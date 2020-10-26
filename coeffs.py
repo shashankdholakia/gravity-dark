@@ -12,9 +12,8 @@ from sympy.functions.special.tensor_functions import KroneckerDelta
 
 
 x, y = symbols('x y', real=True)
-omega, G, M, beta, alpha = symbols("omega G M beta alpha",real=True,positive=True)
+omega, G, M, R_eq, beta, alpha = symbols("omega G M R_eq beta alpha",real=True,positive=True)
 
-### Helper functions to compute the y coefficients (much code from Luger et. al):
 def binomial_exp(x,k,n):
     assert k==int(k)
     return binomial(n,k)*x**(k)
@@ -39,6 +38,8 @@ def Coefficient(expression, term):
     """Return the coefficient multiplying `term` in `expression`."""
     # Get the coefficient
     coeff = expression.coeff(term)
+    if term==1:
+        coeff = expression.subs(sqrt(1 - x ** 2 - y ** 2), 0).subs(x, 0).subs(y, 0)
     # Set any non-constants in this coefficient to zero. If the coefficient
     # is not a constant, this is not the term we are interested in!
     coeff = coeff.subs(sqrt(1 - x ** 2 - y ** 2), 0).subs(x, 0).subs(y, 0)
@@ -168,7 +169,7 @@ def poly_approx(order_approx):
         
     basis = Matrix([poly_basis(n, x, y) for n in range((2*order_approx+1)**2)]).T #need (2*order_approx-2)**2 terms to correctly model
     vec = Matrix([Coefficient(expand(f), term) for term in basis])
-    vec = vec.subs([(alpha,((-2*omega**2/(G**2*M**2) + omega**4/(G**4*M**4))))])
+    vec = vec.subs([(alpha,(-2*omega**2 + omega**4))])
     return vec
 
 def spherical_approx(order_approx):
@@ -191,6 +192,8 @@ def spherical_approx(order_approx):
     
     change_basis_sph = Matrix(A1(2*(order_approx))).inv()
     ycoeffs = simplify(change_basis_sph * vec)
-    ycoeffs = ycoeffs.subs([(alpha,((-2*omega**2/(G**2*M**2) + omega**4/(G**4*M**4))))])
-    return omega, G, M, beta, ycoeffs
-    
+    ycoeffs = ycoeffs.subs([(alpha,(-2*omega**2 + omega**4))])
+    return omega, beta, ycoeffs
+
+def vsini_to_w(vsini):
+    pass
