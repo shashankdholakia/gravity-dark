@@ -1,363 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Sun Oct 11 02:27:41 2020
+Created on Tue Jan 26 21:35:25 2021
 
 @author: shashank
 """
-
-from sympy import symbols, Matrix, Rational, floor, sqrt, zeros, sin, cos, I, exp
-from sympy import simplify, factorial, pi, binomial, expand
-from sympy.functions.special.tensor_functions import KroneckerDelta
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Ellipse
 from scipy.integrate import quad
-from scipy.constants import G, h, c
-from scipy.constants import k as kb
-
-try:
-    from numba import jit, njit
-except ImportError:
-    print("No numba, falling back on slower version")
-    jit = lambda x: x # return the function itself
-
-    
-
-##############################################################################
-#SPHERICAL HARMONICS AND GRAVITY DARKENING FUNCTIONS
-    
-    
-x, y = symbols('x y', real=True)
-omega, beta, alpha = symbols("omega beta alpha",real=True,positive=True)
-
-    
-    
-@njit
-def planck(l, t):
-    return 2.*h*c**2/l**5/(np.exp(h*c/(l*kb*t)) - 1.)
-
-@njit
-def flux(x, y, wav, omega, beta, tpole):
-    temp = tpole * ((omega**4 - 2*omega**2)*(x**2 + y**2) + 1.)**(beta/2)
-    return planck(wav, temp)
-
-
-def binomial_exp(x,k,n):
-    assert k==int(k)
-    return binomial(n,k)*x**(k)
-
-
-def poly_basis(n, x, y):
-    """Return the n^th term in the polynomial basis."""
-    l = Rational(floor(sqrt(n)))
-    m = Rational(n - l * l - l)
-    mu = Rational(l - m)
-    nu = Rational(l + m)
-    if nu % 2 == 0:
-        i = Rational(mu, 2)
-        j = Rational(nu, 2)
-        k = Rational(0)
-    else:
-        i = Rational(mu - 1, 2)
-        j = Rational(nu - 1, 2)
-        k = Rational(1)
-    return x ** i * y ** j * sqrt(1 - x ** 2 - y ** 2) ** k
-
-def Coefficient(expression, term):
-    """Return the coefficient multiplying `term` in `expression`."""
-    # Get the coefficient
-    coeff = expression.coeff(term)
-    if term==1:
-        coeff = expression.subs(sqrt(1 - x ** 2 - y ** 2), 0).subs(x, 0).subs(y, 0)
-    # Set any non-constants in this coefficient to zero. If the coefficient
-    # is not a constant, this is not the term we are interested in!
-    coeff = coeff.subs(sqrt(1 - x ** 2 - y ** 2), 0).subs(x, 0).subs(y, 0)
-    return coeff
-
-def SA(l, m):
-    """A spherical harmonic normalization constant."""
-    return sqrt(
-        (2 - KroneckerDelta(m, 0))
-        * (2 * l + 1)
-        * factorial(l - m)
-        / (4 * pi * factorial(l + m))
-    )
-
-
-def SB(l, m, j, k):
-    """Another spherical harmonic normalization constant."""
-    try:
-        ratio = factorial(Rational(l + m + k - 1, 2)) / factorial(
-            Rational(-l + m + k - 1, 2)
-        )
-    except ValueError:
-        ratio = 0
-    res = (
-        2 ** l
-        * Rational(
-            factorial(m),
-            (factorial(j) * factorial(k) * factorial(m - j) * factorial(l - m - k)),
-        )
-        * ratio
-    )
-    return simplify(res)
-
-
-def SC(p, q, k):
-    """Return the binomial theorem coefficient `C`."""
-    res = factorial(Rational(k, 2)) / (
-        factorial(Rational(q, 2))
-        * factorial(Rational(k - p, 2))
-        * factorial(Rational(p - q, 2))
-    )
-    return simplify(res)
-
-
-def Y(l, m, x, y):
-    """Return the spherical harmonic of degree `l` and order `m`."""
-    res = 0
-    z = sqrt(1 - x ** 2 - y ** 2)
-    if m >= 0:
-        for j in range(0, m + 1, 2):
-            for k in range(0, l - m + 1, 2):
-                for p in range(0, k + 1, 2):
-                    for q in range(0, p + 1, 2):
-                        res += (
-                            (-1) ** ((j + p) // 2)
-                            * SA(l, m)
-                            * SB(l, m, j, k)
-                            * SC(p, q, k)
-                            * x ** (m - j + p - q)
-                            * y ** (j + q)
-                        )
-            for k in range(1, l - m + 1, 2):
-                for p in range(0, k, 2):
-                    for q in range(0, p + 1, 2):
-                        res += (
-                            (-1) ** ((j + p) // 2)
-                            * SA(l, m)
-                            * SB(l, m, j, k)
-                            * SC(p, q, k - 1)
-                            * x ** (m - j + p - q)
-                            * y ** (j + q)
-                            * z
-                        )
-    else:
-        for j in range(1, abs(m) + 1, 2):
-            for k in range(0, l - abs(m) + 1, 2):
-                for p in range(0, k + 1, 2):
-                    for q in range(0, p + 1, 2):
-                        res += (
-                            (-1) ** ((j + p - 1) // 2)
-                            * SA(l, abs(m))
-                            * SB(l, abs(m), j, k)
-                            * SC(p, q, k)
-                            * x ** (abs(m) - j + p - q)
-                            * y ** (j + q)
-                        )
-            for k in range(1, l - abs(m) + 1, 2):
-                for p in range(0, k, 2):
-                    for q in range(0, p + 1, 2):
-                        res += (
-                            (-1) ** ((j + p - 1) // 2)
-                            * SA(l, abs(m))
-                            * SB(l, abs(m), j, k)
-                            * SC(p, q, k - 1)
-                            * x ** (abs(m) - j + p - q)
-                            * y ** (j + q)
-                            * z
-                        )
-
-    return res
-
-
-def p_Y(l, m, lmax):
-    """Return the polynomial basis representation of the spherical harmonic `Y_{lm}`."""
-    ylm = Y(l, m, x, y)
-    res = [ylm.subs(sqrt(1 - x ** 2 - y ** 2), 0).subs(x, 0).subs(y, 0)]
-    for n in range(1, (lmax + 1) ** 2):
-        res.append(Coefficient(ylm, poly_basis(n, x, y)))
-    return res
-
-
-def A1(lmax, norm=2 / sqrt(pi)):
-    """Return the change of basis matrix A1. The columns of this matrix are given by `p_Y`."""
-    res = zeros((lmax + 1) ** 2, (lmax + 1) ** 2)
-    n = 0
-    for l in range(lmax + 1):
-        for m in range(-l, l + 1):
-            res[n] = p_Y(l, m, lmax)
-            n += 1
-    return res * norm
-
-def poly_approx(order_approx):
-    
-    f = 0
-    for i in range(order_approx+1):
-        f+=binomial_exp(x=(alpha*(x**2+y**2)),k=i,n=2*beta).expand(func=True)
-        
-    basis = Matrix([poly_basis(n, x, y) for n in range((2*order_approx+1)**2)]).T #need (2*order_approx-2)**2 terms to correctly model
-    vec = Matrix([Coefficient(expand(f), term) for term in basis])
-    vec = vec.subs([(alpha,(-2*omega**2 + omega**4))])
-    return vec
-
-def spherical_approx(order_approx):
-    
-    """
-    Main function to compute spherical harmonic coefficients using a binomial
-    expansion of the Von Zeipel Law
-    
-    Takes an order (of the expansion)
-    
-    """
-
-    
-    f = 0
-    for i in range(order_approx+1):
-        f+=binomial_exp(x=(alpha*(x**2+y**2)),k=i,n=2*beta).expand(func=True)
-        
-    basis = Matrix([poly_basis(n, x, y) for n in range((2*order_approx+1)**2)]).T #need (2*order_approx-2)**2 terms to correctly model
-    vec = Matrix([Coefficient(expand(f), term) for term in basis])
-    
-    change_basis_sph = Matrix(A1(2*(order_approx))).inv()
-    ycoeffs = simplify(change_basis_sph * vec)
-    ycoeffs = ycoeffs.subs([(alpha,(-2*omega**2 + omega**4))])
-    return omega, beta, ycoeffs
-
-
-##############################################################################
-#INTEGRATION BOUNDS
-    
-def quartic_poly(x, b0, r_p, f, theta):
-
-    x0 = b0*np.sin((theta))
-    y0 = b0*np.cos((theta))
-    b = 1-f
-    A = b**4 - 2*b**2 + 1
-    B = 4*x0*(b**2 - 1)
-    C = -2*b**4 + 2*b**2*(r_p**2 - x0**2 - y0 + 1) - 2*r_p**2 + 6*x0**2 + 4*y0**2 + 2*y0
-    D = 4*x0*(-b**2 + r_p**2 - x0**2 - 2*y0**2 - y0)
-    E = (b**4 + 2*b**2*(-r_p**2 + x0**2 + y0) 
-         + r_p**4 - 2*r_p**2*x0**2 - 4*r_p**2*y0**2 
-         - 2*r_p**2*y0 + x0**4 + 4*x0**2*y0**2 + 2*x0**2*y0 + y0**2)
-    
-    return (A*x**4 + B*x**3 + C*x**2 + D*x + E)
-
-def quartic_poly_2(x, b0, r_p, f, theta):
-    x0 = b0*np.sin(theta)
-    y0 = b0*np.cos(theta)
-    A, B, C, D, E = quartic_coeffs(1-f,x0,y0,r_p)
-    return (A*x**4 + B*x**3 + C*x**2 + D*x + E)
-
-def quartic_coeffs(b, xo, yo, ro):
-    A = (1 - b ** 2) ** 2
-    B = -4 * xo * (1 - b ** 2)
-    C = -2 * (b ** 4 + ro ** 2 - 3 * xo ** 2 - yo ** 2 - b ** 2 * (1 + ro ** 2 - xo ** 2 + yo ** 2))
-    D = -4 * xo * (b ** 2 - ro ** 2 + xo ** 2 + yo ** 2)
-    E = b ** 4 - 2 * b ** 2 * (ro ** 2 - xo ** 2 + yo ** 2) + (ro ** 2 - xo ** 2 - yo ** 2) ** 2
-    return np.array([A, B, C, D, E])
-
-
-
-def find_intersections(b0, r_p, f, theta):
-    """ 
-    b0: impact parameter
-    r_p: planet radius
-    f: oblateness coefficient
-    theta: spin-orbit obliquity *in degrees*
-    """
-    
-    x0 = b0*np.sin(theta)
-    y0 = b0*np.cos(theta)
-    coeff = quartic_coeffs(1-f,x0,y0,r_p)
-    return np.roots(coeff), np.polyval(np.abs(coeff),np.abs(np.roots(coeff)))
-
-def circle_err(x, y, b0, rp, theta):
-    return np.abs((y-b0*np.cos(theta))**2-(rp**2 - (x-b0*np.sin(theta))**2))
-
-def compute_xi(b0, r_p, f, theta):
-    """ 
-    b0: impact parameter
-    r_p: planet radius
-    f: oblateness coefficient
-    theta: spin-orbit obliquity *in degrees*
-    """
-    
-    roots, err = find_intersections(b0, r_p, f, theta)
-    roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
-    
-    # Mark the points of intersection if they exist
-    angles = []
-    if len(roots)>0:
-        #Xi
-        for x_root in roots_real:
-            #x value of intersection point
-            x_root = np.real(x_root)
-            
-            #find angles of intersection on ellipse of a=1 and b=(1-f)
-            lam_pos = np.arctan2((1-f)*np.sqrt(1-x_root**2),x_root)
-            lam_neg = np.arctan2(-(1-f)*np.sqrt(1-x_root**2),x_root)
-
-            r = (1-f)/np.sqrt(((1-f)*np.cos(lam_pos))**2 + np.sin(lam_pos)**2)            
-            
-            x_int = r*np.cos(lam_pos)
-            y_int = r*np.sin(lam_pos)
-            
-            xi = np.arctan2(np.sqrt(1-x_root**2),x_root)
-            xi_neg = np.arctan2(-np.sqrt(1-x_root**2),x_root)     
-            x_int_neg = r*np.cos(lam_neg)
-            y_int_neg = r*np.sin(lam_neg)
-            if circle_err(x_int, y_int, b0, r_p, theta) > circle_err(x_int_neg, y_int_neg, b0, r_p, theta):
-                xi = xi_neg
-                
-            angles.append(xi)
-    return np.array(angles)
-
-def compute_phi(b0, r_p, f, theta):
-    roots, err = find_intersections(b0, r_p, f, theta)
-    roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
-    
-    # Mark the points of intersection if they exist
-    angles = []
-    if len(roots)>0:
-        #phi
-        for x_root in roots_real:
-            #x value of intersection point
-            x_root = np.real(x_root)
-            
-            def rot(b0, theta):
-                #return (0,b0) rotated to the integral reference frame F'
-                return (b0*np.sin(theta), b0*np.cos(theta))   
-            
-            #find angles of intersection on ellipse of a=1 and b=(1-f)
-            lam_pos = np.arctan2((1-f)*np.sqrt(1-x_root**2),x_root)
-            lam_neg = np.arctan2(-(1-f)*np.sqrt(1-x_root**2),x_root)
-
-            r = (1-f)/np.sqrt(((1-f)*np.cos(lam_pos))**2 + np.sin(lam_pos)**2)            
-            
-            x_int = r*np.cos(lam_pos)
-            y_int = r*np.sin(lam_pos)
-            x0, y0 = rot(b0, theta)  
-            x_int_neg = r*np.cos(lam_neg)
-            y_int_neg = r*np.sin(lam_neg)
-            
-            phi = theta + np.arctan2(y_int-y0,x_root-x0)
-            phi_neg = (theta - np.arctan2(-(y_int_neg-y0),x_root-x0))
-            
-            if circle_err(x_int, y_int, b0, r_p, theta) > circle_err(x_int_neg, y_int_neg, b0, r_p, theta):
-                phi = phi_neg
-                
-            angles.append(phi)
-    return np.array(angles)
-
 
 ###############################################################################
 #GREENS THEOREM AND OBLATE STAR INTEGRATION
     
-@njit
-def f(omega):
-    return 1 - ((2/3)**(-3/2) * omega) / (3*np.sin(np.arcsin((2/3)**(-3/2) * omega) / 3))
     
 def G(n, f):
     """
@@ -563,6 +218,133 @@ def compute_disk(f, theta, terms, star):
     for n in range(terms):
         tT[n] = tT_numerical(np.array([0,2*np.pi]), (1-f), theta[0], n)
     return tT
+
+
+##############################################################################
+#INTEGRATION BOUNDS
+    
+def quartic_poly(x, b0, r_p, f, theta):
+
+    x0 = b0*np.sin((theta))
+    y0 = b0*np.cos((theta))
+    b = 1-f
+    A = b**4 - 2*b**2 + 1
+    B = 4*x0*(b**2 - 1)
+    C = -2*b**4 + 2*b**2*(r_p**2 - x0**2 - y0 + 1) - 2*r_p**2 + 6*x0**2 + 4*y0**2 + 2*y0
+    D = 4*x0*(-b**2 + r_p**2 - x0**2 - 2*y0**2 - y0)
+    E = (b**4 + 2*b**2*(-r_p**2 + x0**2 + y0) 
+         + r_p**4 - 2*r_p**2*x0**2 - 4*r_p**2*y0**2 
+         - 2*r_p**2*y0 + x0**4 + 4*x0**2*y0**2 + 2*x0**2*y0 + y0**2)
+    
+    return (A*x**4 + B*x**3 + C*x**2 + D*x + E)
+
+def quartic_poly_2(x, b0, r_p, f, theta):
+    x0 = b0*np.sin(theta)
+    y0 = b0*np.cos(theta)
+    A, B, C, D, E = quartic_coeffs(1-f,x0,y0,r_p)
+    return (A*x**4 + B*x**3 + C*x**2 + D*x + E)
+
+def quartic_coeffs(b, xo, yo, ro):
+    A = (1 - b ** 2) ** 2
+    B = -4 * xo * (1 - b ** 2)
+    C = -2 * (b ** 4 + ro ** 2 - 3 * xo ** 2 - yo ** 2 - b ** 2 * (1 + ro ** 2 - xo ** 2 + yo ** 2))
+    D = -4 * xo * (b ** 2 - ro ** 2 + xo ** 2 + yo ** 2)
+    E = b ** 4 - 2 * b ** 2 * (ro ** 2 - xo ** 2 + yo ** 2) + (ro ** 2 - xo ** 2 - yo ** 2) ** 2
+    return np.array([A, B, C, D, E])
+
+
+
+def find_intersections(b0, r_p, f, theta):
+    """ 
+    b0: impact parameter
+    r_p: planet radius
+    f: oblateness coefficient
+    theta: spin-orbit obliquity *in degrees*
+    """
+    
+    x0 = b0*np.sin(theta)
+    y0 = b0*np.cos(theta)
+    coeff = quartic_coeffs(1-f,x0,y0,r_p)
+    return np.roots(coeff), np.polyval(np.abs(coeff),np.abs(np.roots(coeff)))
+
+def circle_err(x, y, b0, rp, theta):
+    return np.abs((y-b0*np.cos(theta))**2-(rp**2 - (x-b0*np.sin(theta))**2))
+
+def compute_xi(b0, r_p, f, theta):
+    """ 
+    b0: impact parameter
+    r_p: planet radius
+    f: oblateness coefficient
+    theta: spin-orbit obliquity *in degrees*
+    """
+    
+    roots, err = find_intersections(b0, r_p, f, theta)
+    roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
+    
+    # Mark the points of intersection if they exist
+    angles = []
+    if len(roots)>0:
+        #Xi
+        for x_root in roots_real:
+            #x value of intersection point
+            x_root = np.real(x_root)
+            
+            #find angles of intersection on ellipse of a=1 and b=(1-f)
+            lam_pos = np.arctan2((1-f)*np.sqrt(1-x_root**2),x_root)
+            lam_neg = np.arctan2(-(1-f)*np.sqrt(1-x_root**2),x_root)
+
+            r = (1-f)/np.sqrt(((1-f)*np.cos(lam_pos))**2 + np.sin(lam_pos)**2)            
+            
+            x_int = r*np.cos(lam_pos)
+            y_int = r*np.sin(lam_pos)
+            
+            xi = np.arctan2(np.sqrt(1-x_root**2),x_root)
+            xi_neg = np.arctan2(-np.sqrt(1-x_root**2),x_root)     
+            x_int_neg = r*np.cos(lam_neg)
+            y_int_neg = r*np.sin(lam_neg)
+            if circle_err(x_int, y_int, b0, r_p, theta) > circle_err(x_int_neg, y_int_neg, b0, r_p, theta):
+                xi = xi_neg
+                
+            angles.append(xi)
+    return np.array(angles)
+
+def compute_phi(b0, r_p, f, theta):
+    roots, err = find_intersections(b0, r_p, f, theta)
+    roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
+    
+    # Mark the points of intersection if they exist
+    angles = []
+    if len(roots)>0:
+        #phi
+        for x_root in roots_real:
+            #x value of intersection point
+            x_root = np.real(x_root)
+            
+            def rot(b0, theta):
+                #return (0,b0) rotated to the integral reference frame F'
+                return (b0*np.sin(theta), b0*np.cos(theta))   
+            
+            #find angles of intersection on ellipse of a=1 and b=(1-f)
+            lam_pos = np.arctan2((1-f)*np.sqrt(1-x_root**2),x_root)
+            lam_neg = np.arctan2(-(1-f)*np.sqrt(1-x_root**2),x_root)
+
+            r = (1-f)/np.sqrt(((1-f)*np.cos(lam_pos))**2 + np.sin(lam_pos)**2)            
+            
+            x_int = r*np.cos(lam_pos)
+            y_int = r*np.sin(lam_pos)
+            x0, y0 = rot(b0, theta)  
+            x_int_neg = r*np.cos(lam_neg)
+            y_int_neg = r*np.sin(lam_neg)
+            
+            phi = theta + np.arctan2(y_int-y0,x_root-x0)
+            phi_neg = (theta - np.arctan2(-(y_int_neg-y0),x_root-x0))
+            
+            if circle_err(x_int, y_int, b0, r_p, theta) > circle_err(x_int_neg, y_int_neg, b0, r_p, theta):
+                phi = phi_neg
+                
+            angles.append(phi)
+    return np.array(angles)
+
 
 ###############################################################################
 #PLOTTING
