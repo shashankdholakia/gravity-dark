@@ -8,7 +8,7 @@ Created on Tue Jan 26 21:35:25 2021
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Ellipse
-from scipy.integrate import quad
+from scipy.integrate import quad, fixed_quad, romberg
 
 ###############################################################################
 #GREENS THEOREM AND OBLATE STAR INTEGRATION
@@ -344,6 +344,8 @@ def compute_phi(b0, r_p, f, theta):
                 
             angles.append(phi)
     return np.array(angles)
+
+
 
 
 ###############################################################################
