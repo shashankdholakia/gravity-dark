@@ -10,6 +10,11 @@ import numpy as np
 from scipy.constants import h, c
 from scipy.constants import k as kb
 
+import starry
+from scipy.spatial.transform import Rotation as R
+starry.config.lazy = False
+starry.config.quiet = True
+
 try:
     from numba import jit, njit
 except ImportError:
@@ -51,7 +56,41 @@ def flux_spherical(x, y, wav, omega, beta, tpole):
     return planck(wav, temp)
 
 
+def plot_precision_long(omegas):
+    ref_fluxes = []
+    sph_harm_flux = []
+    map0 = starry.Map(ydeg=3)
+    lat, lon, Y2P, P2Y, Dx, Dy = map0.get_pixel_transforms(oversample=10)
+    phi = np.radians(lat)
+    theta = np.radians(lon)
+    x = np.cos(phi) * np.cos(theta)
+    y = np.cos(phi) * np.sin(theta)
+    z = np.sin(phi)
+    plt.clf()
+    for omega in omegas:
+        #first pixelize a map to find reference values
 
+        #reference flux
+        flux = flux_oblate(x, y, 5.1e-7, omega, 0.22, 7600)
+        flux /= np.max(flux)
+        ref_fluxes.append(flux)
+        
+        #now compare to spherical harmonic transform
+        yarr = P2Y.dot(flux)
+        p = Y2P.dot(yarr)
+        sph_harm_flux.append(p)
+        plt.scatter(lat[lat.argsort()], ((flux-p)/flux)[lat.argsort()], label=r"$\omega=$"+ str(omega))
+        
+    plt.legend()
+    #plt.yscale('log')
+    plt.xlabel('Latitude (degrees)')
+    plt.ylabel('Residual')
+    plt.show()
+    
+    
 
+if __name__=='__main__':
+    plot_precision_long([0.2,0.4,0.6,0.8])
+        
 
 

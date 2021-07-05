@@ -8,7 +8,11 @@ Created on Tue Jan 26 21:44:42 2021
 from sympy import symbols, Matrix, Rational, floor, sqrt, zeros
 from sympy import simplify, factorial, pi, binomial, expand
 from sympy.functions.special.tensor_functions import KroneckerDelta
-
+import starry
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+starry.config.lazy = False
+starry.config.quiet = True
 
 ##############################################################################
 #SPHERICAL HARMONICS AND GRAVITY DARKENING FUNCTIONS
@@ -199,3 +203,4 @@ def poly_approx(order_approx):
     vec = Matrix([Coefficient(expand(f), term) for term in basis])
     vec = vec.subs([(alpha,(-2*omega**2 + omega**4))])
     return vec
+        

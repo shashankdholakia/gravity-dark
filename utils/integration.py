@@ -7,7 +7,7 @@ Created on Tue Jan 26 21:35:25 2021
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Ellipse
+from matplotlib.patches import Circle, Ellipse, Arc
 from scipy.integrate import quad, fixed_quad, romberg
 from scipy.special import hyp2f1, ellipeinc
 from scipy.special import comb
@@ -148,7 +148,7 @@ def tT_numerical(xi, b, theta, n=0):
         res += primitive(x, y, dx, dy, xi1, xi2, b, theta, n)
     return res
 
-def pT(phi, bo, ro, b, theta, n=0):
+def pT_numerical(phi, bo, ro, b, theta, n=0):
     """Compute the pT integral numerically from its integral definition."""
     res = 0
     for phi1, phi2 in phi.reshape(-1, 2):
@@ -162,10 +162,10 @@ def pT(phi, bo, ro, b, theta, n=0):
         res += primitive(x, y, dx, dy, phi1, phi2, b, theta, n)
     return res
 
-def sT(phi, xi, f, theta, b0, rp, n=0):
+def sT_numerical(phi, xi, f, theta, bo, rp, n=0):
     """The solution vector for occultations, computed via Green's theorem."""
     b=1-f
-    return pT(phi, b0, rp, b, theta, n) + tT_numerical(xi, b, theta, n)
+    return pT(phi, bo, rp, b, theta, n) + tT_numerical(xi, b, theta, n)
 
 def sT_bruteforce(f, theta, bo, ro, n=0, res=300):
 
@@ -253,10 +253,10 @@ def analytic_sT(f, theta, bo, ro, terms):
 ##############################################################################
 #INTEGRATION BOUNDS
     
-def quartic_poly(x, b0, r_p, f, theta):
+def quartic_poly(x, bo, r_p, f, theta):
 
-    x0 = b0*np.sin((theta))
-    y0 = b0*np.cos((theta))
+    x0 = bo*np.sin((theta))
+    y0 = bo*np.cos((theta))
     b = 1-f
     A = b**4 - 2*b**2 + 1
     B = 4*x0*(b**2 - 1)
@@ -268,9 +268,9 @@ def quartic_poly(x, b0, r_p, f, theta):
     
     return (A*x**4 + B*x**3 + C*x**2 + D*x + E)
 
-def quartic_poly_2(x, b0, r_p, f, theta):
-    x0 = b0*np.sin(theta)
-    y0 = b0*np.cos(theta)
+def quartic_poly_2(x, bo, r_p, f, theta):
+    x0 = bo*np.sin(theta)
+    y0 = bo*np.cos(theta)
     A, B, C, D, E = quartic_coeffs(1-f,x0,y0,r_p)
     return (A*x**4 + B*x**3 + C*x**2 + D*x + E)
 
@@ -284,31 +284,31 @@ def quartic_coeffs(b, xo, yo, ro):
 
 
 
-def find_intersections(b0, r_p, f, theta):
+def find_intersections(bo, r_p, f, theta):
     """ 
-    b0: impact parameter
+    bo: impact parameter
     r_p: planet radius
     f: oblateness coefficient
     theta: spin-orbit obliquity *in degrees*
     """
     
-    x0 = b0*np.sin(theta)
-    y0 = b0*np.cos(theta)
+    x0 = bo*np.sin(theta)
+    y0 = bo*np.cos(theta)
     coeff = quartic_coeffs(1-f,x0,y0,r_p)
     return np.roots(coeff), np.polyval(np.abs(coeff),np.abs(np.roots(coeff)))
 
-def circle_err(x, y, b0, rp, theta):
-    return np.abs((y-b0*np.cos(theta))**2-(rp**2 - (x-b0*np.sin(theta))**2))
+def circle_err(x, y, bo, rp, theta):
+    return np.abs((y-bo*np.cos(theta))**2-(rp**2 - (x-bo*np.sin(theta))**2))
 
-def compute_xi(b0, r_p, f, theta):
+def compute_xi(bo, r_p, f, theta):
     """ 
-    b0: impact parameter
+    bo: impact parameter
     r_p: planet radius
     f: oblateness coefficient
     theta: spin-orbit obliquity *in degrees*
     """
     
-    roots, err = find_intersections(b0, r_p, f, theta)
+    roots, err = find_intersections(bo, r_p, f, theta)
     roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
     
     # Mark the points of intersection if they exist
@@ -332,14 +332,14 @@ def compute_xi(b0, r_p, f, theta):
             xi_neg = np.arctan2(-np.sqrt(1-x_root**2),x_root)     
             x_int_neg = r*np.cos(lam_neg)
             y_int_neg = r*np.sin(lam_neg)
-            if circle_err(x_int, y_int, b0, r_p, theta) > circle_err(x_int_neg, y_int_neg, b0, r_p, theta):
+            if circle_err(x_int, y_int, bo, r_p, theta) > circle_err(x_int_neg, y_int_neg, bo, r_p, theta):
                 xi = xi_neg
                 
             angles.append(xi)
     return np.array(angles)
 
-def compute_phi(b0, r_p, f, theta):
-    roots, err = find_intersections(b0, r_p, f, theta)
+def compute_phi(bo, r_p, f, theta):
+    roots, err = find_intersections(bo, r_p, f, theta)
     roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
     
     # Mark the points of intersection if they exist
@@ -350,9 +350,9 @@ def compute_phi(b0, r_p, f, theta):
             #x value of intersection point
             x_root = np.real(x_root)
             
-            def rot(b0, theta):
-                #return (0,b0) rotated to the integral reference frame F'
-                return (b0*np.sin(theta), b0*np.cos(theta))   
+            def rot(bo, theta):
+                #return (0,bo) rotated to the integral reference frame F'
+                return (bo*np.sin(theta), bo*np.cos(theta))   
             
             #find angles of intersection on ellipse of a=1 and b=(1-f)
             lam_pos = np.arctan2((1-f)*np.sqrt(1-x_root**2),x_root)
@@ -362,14 +362,14 @@ def compute_phi(b0, r_p, f, theta):
             
             x_int = r*np.cos(lam_pos)
             y_int = r*np.sin(lam_pos)
-            x0, y0 = rot(b0, theta)  
+            x0, y0 = rot(bo, theta)  
             x_int_neg = r*np.cos(lam_neg)
             y_int_neg = r*np.sin(lam_neg)
             
             phi = theta + np.arctan2(y_int-y0,x_root-x0)
             phi_neg = (theta - np.arctan2(-(y_int_neg-y0),x_root-x0))
             
-            if circle_err(x_int, y_int, b0, r_p, theta) > circle_err(x_int_neg, y_int_neg, b0, r_p, theta):
+            if circle_err(x_int, y_int, bo, r_p, theta) > circle_err(x_int_neg, y_int_neg, bo, r_p, theta):
                 phi = phi_neg
                 
             angles.append(phi)
@@ -583,14 +583,14 @@ class Solver:
         sp1 = np.sin(phip1)
         sp2 = np.sin(phip2)
         A0 = cp1 * sp1
-        B0 = cp2 * sp2
+        bo = cp2 * sp2
         C0 = cp2 * sp2
         D0 = cp1 * sp1
 
         # Recurse
         for u in range(self.lmax + 3):
             A = A0
-            B = B0
+            B = bo
             C = C0
             D = D0
             for v in range(2, self.lmax + 3):
@@ -602,7 +602,7 @@ class Solver:
                 C *= cp2
                 D *= cp1
             A0 *= cp1
-            B0 *= cp2
+            bo *= cp2
             C0 *= sp2
             D0 *= sp1
 
@@ -760,22 +760,27 @@ class Solver:
 ###############################################################################
 #PLOTTING
     
-def draw_oblate(b0, rp, f, theta):
+def draw_oblate(bo, rp, f, theta):
     # Set up the figure
     fig, ax = plt.subplots(1, figsize=(8, 8))
-    ax.set_xlim(min(-1.01, -rp - 0.01), max(1.01, rp + 0.01));
-    ax.set_ylim(-1.01, max(1.01, b0 + rp + 0.01));
-    ax.set_aspect(1);
 
+    ax.set_xlim(min(-1.01, -rp - 0.01), max(1.01, rp + 0.01));
+    ax.set_ylim(-1.01, max(1.01, bo + rp + 0.01));
+    ax.set_aspect(1)
+    ax.axis('off')
+    
     # Draw the two bodies
     occulted = Ellipse((0, 0), 1.0*2,(1-f)*2,np.degrees(theta), fill=False, color='k')
+    occulted = Ellipse((0, 0), 1.0*2,(1-f)*2,np.degrees(theta), fill=True, color='k',alpha=0.1)
+
     ax.add_artist(occulted)
-    occultor = Circle((0, b0), rp, fill=False, color='r')
+    occultor = Circle((0, bo), rp, fill=False, color='r')
+    occultor = Circle((0, bo), rp, fill=True, color='r',alpha=0.1)
     ax.add_artist(occultor)
     ax.plot(0, 0, 'ko')
-    ax.plot(0, b0, 'ro')
+    ax.plot(0, bo, 'ro')
     
-    roots, err = find_intersections(b0, rp, f, theta)
+    roots, err = find_intersections(bo, rp, f, theta)
     roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
     
     # Mark the points of intersection if they exist
@@ -794,37 +799,37 @@ def draw_oblate(b0, rp, f, theta):
             x_neg = r*np.cos(lam_neg)
             y_neg = r*np.sin(lam_neg)
             special = False
-            if circle_err(x, y, b0, rp, theta) > circle_err(x_neg, y_neg, b0, rp, theta):
+            if circle_err(x, y, bo, rp, theta) > circle_err(x_neg, y_neg, bo, rp, theta):
                 x = x_neg
                 y = y_neg
-            elif np.isclose(circle_err(x, y, b0, rp, theta), circle_err(x_neg, y_neg, b0, rp, theta),atol=1e-8):
+            elif np.isclose(circle_err(x, y, bo, rp, theta), circle_err(x_neg, y_neg, bo, rp, theta),atol=1e-8):
                 #90 degree case, or too close to tell
                 special = True
             
             def rot(x,y, theta):
                 #return x,y rotated back into the standard reference frame F
                 return (x*np.cos(theta) - y*np.sin(theta), x*np.sin(theta) + y*np.cos(theta))
-            def rot_Fprime(b0, theta):
-                #return (0,b0) rotated to the integral reference frame F'
+            def rot_Fprime(bo, theta):
+                #return (0,bo) rotated to the integral reference frame F'
                 return (x*np.cos(theta) + y*np.sin(theta), -x*np.sin(theta) + y*np.cos(theta))   
             
 
-            plt.plot([0, rot(x, y, theta)[0]], [0, rot(x, y, theta)[1]], 'k-', alpha=0.3)
+            plt.plot([0, rot(x, y, theta)[0]], [0, rot(x, y, theta)[1]], 'k-', alpha=0.2)
             plt.plot(rot(x, y, theta)[0], rot(x, y, theta)[1], 'ko', ms=5)
-            plt.plot([0,rot(x, y, theta)[0]],[b0, rot(x, y, theta)[1]], 'r-', alpha=0.3)
+            plt.plot([0,rot(x, y, theta)[0]],[bo, rot(x, y, theta)[1]], 'r-', alpha=0.2)
             if special:
-                plt.plot([0, rot(x_neg, y_neg, theta)[0]], [0, rot(x_neg, y_neg, theta)[1]], 'k-', alpha=0.3)
+                plt.plot([0, rot(x_neg, y_neg, theta)[0]], [0, rot(x_neg, y_neg, theta)[1]], 'k-', alpha=0.2)
                 plt.plot(rot(x_neg, y_neg, theta)[0], rot(x_neg, y_neg, theta)[1], 'ko', ms=5)
-                plt.plot([0,rot(x_neg, y_neg, theta)[0]],[b0, rot(x_neg, y_neg, theta)[1]], 'r-', alpha=0.3)
+                plt.plot([0,rot(x_neg, y_neg, theta)[0]],[bo, rot(x_neg, y_neg, theta)[1]], 'r-', alpha=0.2)
                 
                 
-def draw_oblate_full(b0, rp, f, theta):
+def draw_oblate_full(bo, rp, f, theta):
     
     """theta in radians"""
     # Set up the figure
     fig, ax = plt.subplots(1, figsize=(8, 8))
     ax.set_xlim(min(-1.01, -rp - 0.01), max(1.01, rp + 0.01));
-    ax.set_ylim(-1.01, max(1.01, b0 + rp + 0.01));
+    ax.set_ylim(-1.01, max(1.01, bo + rp + 0.01));
     ax.set_aspect(1);
 
     # Draw the two bodies
@@ -832,12 +837,14 @@ def draw_oblate_full(b0, rp, f, theta):
     occulted_circ = Circle((0, 0), 1.0, fill=False, color='b',alpha=0.5)
     ax.add_artist(occulted)
     ax.add_artist(occulted_circ)
-    occultor = Circle((0, b0), rp, fill=False, color='r')
+    occultor = Circle((0, bo), rp, fill=False, color='r')
     ax.add_artist(occultor)
     ax.plot(0, 0, 'ko')
-    ax.plot(0, b0, 'ro')
+    ax.plot(0, bo, 'ro')
     
-    roots, err = find_intersections(b0, rp, f, theta)
+
+    
+    roots, err = find_intersections(bo, rp, f, theta)
     roots_real = roots[np.isclose(roots,np.real(roots),atol=0.0001)] #discard imaginary roots
     # Mark the points of intersection if they exist
     angles = []
@@ -864,12 +871,12 @@ def draw_oblate_full(b0, rp, f, theta):
             y_int_neg = r*np.sin(lam_neg)
             
             special = False
-            if circle_err(x_int, y_int, b0, rp, theta) > circle_err(x_int_neg, y_int_neg, b0, rp, theta):
+            if circle_err(x_int, y_int, bo, rp, theta) > circle_err(x_int_neg, y_int_neg, bo, rp, theta):
                 x_int = x_int_neg
                 y_int = y_int_neg
                 x = np.cos(xi_neg)
                 y = np.sin(xi_neg)
-            elif np.isclose(circle_err(x_int, y_int, b0, rp, theta), circle_err(x_int_neg, y_int_neg, b0, rp, theta),atol=1e-8):
+            elif np.isclose(circle_err(x_int, y_int, bo, rp, theta), circle_err(x_int_neg, y_int_neg, bo, rp, theta),atol=1e-8):
                 #90 degree case, or too close to tell
                 special = True
             
@@ -878,12 +885,12 @@ def draw_oblate_full(b0, rp, f, theta):
                 #return x,y rotated back into the standard reference frame F
                 return (x*np.cos(theta) - y*np.sin(theta), x*np.sin(theta) + y*np.cos(theta))
             #plot the intersection points and draw a blue line from the origin to the outer radius of the bounding circle
-            plt.plot([0, rot(x, y, theta)[0]], [0, rot(x, y, theta)[1]], 'b-', alpha=0.3)
+            plt.plot([0, rot(x, y, theta)[0]], [0, rot(x, y, theta)[1]], 'b-', alpha=0.2)
             plt.plot(rot(x, y, theta)[0], rot(x, y, theta)[1], 'ko', ms=5)
             plt.plot(rot(x_int, y_int, theta)[0], rot(x_int, y_int, theta)[1], 'ko', ms=5)
             
             #plot the red line from center of planet to intersectioon points
-            plt.plot([0,rot(x_int, y_int, theta)[0]],[b0, rot(x_int, y_int, theta)[1]], 'r-', alpha=0.3)
+            plt.plot([0,rot(x_int, y_int, theta)[0]],[bo, rot(x_int, y_int, theta)[1]], 'r-', alpha=0.2)
 
             xs = [rot(x, y, theta)[0],rot(x, 0, theta)[0]]
             ys = [rot(x, y, theta)[1],rot(x, 0, theta)[1]]
@@ -896,3 +903,147 @@ def draw_oblate_full(b0, rp, f, theta):
             angles.append(xi)
         return np.degrees(angles)
     
+def draw_oblate_paper(bo, ro, f, theta, filename=None):
+    
+    # Domain adjustment
+    if bo < 0:
+        bo = -bo
+        theta -= np.pi
+
+    # Set up the figure
+    fig, ax = plt.subplots(1, figsize=(8, 8))
+    ax.set_xlim(-1.01, 1.01)
+    ax.set_ylim(-1.01, 1.01)
+    #ax.set_xlim(-1.01 - 2 * ro, 1.01 + 2 * ro)
+    #ax.set_ylim(-1.01 - 2 * ro, 1.01 + 2 * ro)
+    ax.set_aspect(1)
+    ax.axis("off")
+
+    # Draw the two bodies
+    occulted = Ellipse((0, 0), 1.0 * 2, (1 - f) * 2, 0, fill=False, color="k", lw=1)
+    ax.add_artist(occulted)
+    occulted_max = Circle(
+        (0, 0), 1.0, fill=False, color="k", alpha=0.2, ls="--", lw=1
+    )
+    ax.add_artist(occulted_max)
+    #occulted_min = Circle(
+        #(0, 0), 1.0 - f, fill=False, color="k", alpha=0.2, ls="--", lw=1
+    #)
+    #ax.add_artist(occulted_min)
+    occultor = Circle(
+        (bo * np.sin(theta), bo * np.cos(theta)), ro, fill=False, color="r", lw=1
+    )
+    ax.add_artist(occultor)
+    ax.plot(0, 0, "ko", ms=3)
+    ax.plot(bo * np.sin(theta), bo * np.cos(theta), "ro", ms=3)
+
+    # Get angles
+    xi = compute_xi(bo, ro, f, theta)
+    phi = compute_phi(bo, ro, f, theta)
+#    ax.set_title(
+#        r"$\phi: [{:.0f}^\circ, {:.0f}^\circ] \,\,\,\,\,\,\,\,\,\,\,\,\,\,\, \xi: [{:.0f}^\circ, {:.0f}^\circ]$".format(
+#            *(phi * 180 / np.pi), *(xi * 180 / np.pi)
+#        ),
+#        fontsize=12,
+#    )
+
+    # Integration path along occultor (white --> red)
+    x = np.zeros(10000)
+    y = np.zeros(10000)
+    for k, phi_k in enumerate(np.linspace(phi[1], phi[0]+np.pi*2, 10000)):
+        x0 = ro * np.cos(phi_k)
+        y0 = bo + ro * np.sin(phi_k)
+        x[k] = x0 * np.cos(theta) + y0 * np.sin(theta)
+        y[k] = -x0 * np.sin(theta) + y0 * np.cos(theta)
+    ax.plot(x, y, "r", zorder=99)
+    ax.plot(x[0], y[0], "ro", zorder=100, ms=4)
+    ax.plot(x[-1], y[-1], "ro", zorder=100, ms=4)
+    #planet integration angle
+    ax.plot([bo*np.sin(theta), x[0]], 
+              [bo*np.cos(theta), y[0]],
+              color="r", alpha=0.5, ls="-", lw=1
+    )
+    ax.plot([bo*np.sin(theta), x[-1]], 
+              [bo*np.cos(theta), y[-1]],
+              color="r", alpha=0.5, ls="-", lw=1
+    )
+    
+    #planet projected equator
+    ax.plot([bo*np.sin(theta)-ro, bo*np.sin(theta)+ro], 
+              [bo*np.cos(theta), bo*np.cos(theta)],
+              color="r", alpha=0.3, ls="--", lw=1
+    )
+    
+    stellar_angle = Arc((0, 0), 0.15, 0.15, 0, 0, np.degrees(xi[0]), color="k", alpha=0.4, ls="-", lw=1)
+    ax.add_patch(stellar_angle)
+    ax.text(0.08,0.04, s=r"$\xi$", size=10, color='k',alpha=0.6)
+    
+    planet_angle = Arc((np.sin(theta)*bo, np.cos(theta)*bo), 0.15, 0.15, 0, 0, np.degrees(phi[0])-np.degrees(theta), color="r", alpha=0.7, ls="-", lw=1)
+    ax.add_patch(planet_angle)
+    ax.text(np.sin(theta)*bo+0.1, np.cos(theta)*bo+0.014, s=r"$\phi$", size=10, color='r',alpha=0.7)
+    
+    for i in np.arange(0,len(x),len(x)//6)[1:]:
+    #for i in [len(x) // 4, len(x) // 2, (3 * len(x)) // 4, len(x) - 2]:
+        plt.annotate(
+            "",
+            xytext=(x[i], y[i]),
+            xy=(x[i + 1], y[i + 1]),
+            arrowprops=dict(arrowstyle="->", color="r"),
+            size=12,
+        )
+
+    # Integration path along star (white --> black)
+    x = np.zeros(10000)
+    y = np.zeros(10000)
+    for k, xi_k in enumerate(np.linspace(xi[0], xi[1], 10000)):
+        x[k] = np.cos(xi_k)
+        y[k] = (1 - f) * np.sin(xi_k)
+    ax.plot(x, y, "k", zorder=99)
+    ax.plot(x[0], y[0], "ko", zorder=101, ms=2)
+    ax.plot(x[-1], y[-1], "ko", zorder=101, ms=2)
+    for i in [len(x) // 4, len(x) // 2, (3 * len(x)) // 4, len(x) - 2]:
+        plt.annotate(
+            "",
+            xytext=(x[i], y[i]),
+            xy=(x[i + 1], y[i + 1]),
+            arrowprops=dict(arrowstyle="->", color="k"),
+            size=12,
+        )
+    ax.plot([0, np.cos(xi[0])], 
+              [0, np.sin(xi[0])],
+              color="k", alpha=0.4, ls="-", lw=1
+    )
+    ax.plot([0, np.cos(xi[-1])], 
+              [0, np.sin(xi[-1])],
+              color="k", alpha=0.4, ls="-", lw=1
+    )
+    
+    ax.plot([np.cos(xi[0]), np.cos(xi[0])], 
+              [0, np.sin(xi[0])],
+              color="k", alpha=0.2, ls="--", lw=1
+    )
+    
+    ax.plot([np.cos(xi[-1]), np.cos(xi[-1])], 
+              [0, np.sin(xi[-1])],
+              color="k", alpha=0.2, ls="--", lw=1
+    )
+    #stellar projected equator 
+    ax.plot([-1,1],[0,0],color="k", alpha=0.2, ls="--", lw=1
+    )
+    
+    ax.annotate(r"occultor", xy=(np.sin(theta)*bo+0.02, np.cos(theta)*bo + ro + 0.03), xycoords="data",
+            xytext=(0, 0),
+            textcoords="offset points", ha="center", va="bottom",
+            fontsize=12, color="r")
+    
+    ax.annotate(r"occulted", xy=(0, -1.05+f), xycoords="data",
+            xytext=(0, 0),
+            textcoords="offset points", ha="center", va="top",
+            fontsize=12, color="k")
+    if filename is None:
+        pass
+    else:
+        plt.savefig(filename, bbox_inches='tight')
+    
+if __name__=='__main__':
+    draw_oblate_paper(0.51, 0.3, 0.33, np.radians(37),filename="../integration_bounds.pdf")
