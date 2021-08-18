@@ -950,14 +950,15 @@ def draw_oblate_paper(bo, ro, f, theta, filename=None):
     # Integration path along occultor (white --> red)
     x = np.zeros(10000)
     y = np.zeros(10000)
-    for k, phi_k in enumerate(np.linspace(phi[1], phi[0]+np.pi*2, 10000)):
+    for k, phi_k in enumerate(np.linspace(phi[0]+2*np.pi, phi[1], 10000)):
         x0 = ro * np.cos(phi_k)
         y0 = bo + ro * np.sin(phi_k)
         x[k] = x0 * np.cos(theta) + y0 * np.sin(theta)
         y[k] = -x0 * np.sin(theta) + y0 * np.cos(theta)
-    ax.plot(x, y, "r", zorder=99)
+    ax.plot(x, y, "r", zorder=99,lw=2)
     ax.plot(x[0], y[0], "ro", zorder=100, ms=4)
     ax.plot(x[-1], y[-1], "ro", zorder=100, ms=4)
+    
     #planet integration angle
     ax.plot([bo*np.sin(theta), x[0]], 
               [bo*np.cos(theta), y[0]],
@@ -976,38 +977,38 @@ def draw_oblate_paper(bo, ro, f, theta, filename=None):
     
     stellar_angle = Arc((0, 0), 0.15, 0.15, 0, 0, np.degrees(xi[0]), color="k", alpha=0.4, ls="-", lw=1)
     ax.add_patch(stellar_angle)
-    ax.text(0.08,0.04, s=r"$\xi$", size=10, color='k',alpha=0.6)
+    ax.text(0.08,0.04, s=r"$\xi$", size=14, color='k',alpha=0.6)
     
     planet_angle = Arc((np.sin(theta)*bo, np.cos(theta)*bo), 0.15, 0.15, 0, 0, np.degrees(phi[0])-np.degrees(theta), color="r", alpha=0.7, ls="-", lw=1)
     ax.add_patch(planet_angle)
-    ax.text(np.sin(theta)*bo+0.1, np.cos(theta)*bo+0.014, s=r"$\phi$", size=10, color='r',alpha=0.7)
+    ax.text(np.sin(theta)*bo+0.1, np.cos(theta)*bo+0.014, s=r"$\phi$", size=14, color='r',alpha=0.7)
     
-    for i in np.arange(0,len(x),len(x)//6)[1:]:
+    for i in np.arange(0,len(x),len(x)//8)[1:]:
     #for i in [len(x) // 4, len(x) // 2, (3 * len(x)) // 4, len(x) - 2]:
         plt.annotate(
             "",
             xytext=(x[i], y[i]),
             xy=(x[i + 1], y[i + 1]),
             arrowprops=dict(arrowstyle="->", color="r"),
-            size=12,
+            size=20,
         )
 
     # Integration path along star (white --> black)
     x = np.zeros(10000)
     y = np.zeros(10000)
-    for k, xi_k in enumerate(np.linspace(xi[0], xi[1], 10000)):
+    for k, xi_k in enumerate(np.linspace(xi[1], xi[0]+2*np.pi, 10000)):
         x[k] = np.cos(xi_k)
         y[k] = (1 - f) * np.sin(xi_k)
-    ax.plot(x, y, "k", zorder=99)
+    ax.plot(x, y, "k", zorder=99,lw=2)
     ax.plot(x[0], y[0], "ko", zorder=101, ms=2)
     ax.plot(x[-1], y[-1], "ko", zorder=101, ms=2)
-    for i in [len(x) // 4, len(x) // 2, (3 * len(x)) // 4, len(x) - 2]:
+    for i in np.arange(0,len(x),len(x)//12)[1:]:
         plt.annotate(
             "",
             xytext=(x[i], y[i]),
             xy=(x[i + 1], y[i + 1]),
             arrowprops=dict(arrowstyle="->", color="k"),
-            size=12,
+            size=20,
         )
     ax.plot([0, np.cos(xi[0])], 
               [0, np.sin(xi[0])],
@@ -1034,16 +1035,16 @@ def draw_oblate_paper(bo, ro, f, theta, filename=None):
     ax.annotate(r"occultor", xy=(np.sin(theta)*bo+0.02, np.cos(theta)*bo + ro + 0.03), xycoords="data",
             xytext=(0, 0),
             textcoords="offset points", ha="center", va="bottom",
-            fontsize=12, color="r")
+            fontsize=16, color="r")
     
     ax.annotate(r"occulted", xy=(0, -1.05+f), xycoords="data",
             xytext=(0, 0),
             textcoords="offset points", ha="center", va="top",
-            fontsize=12, color="k")
+            fontsize=16, color="k")
     if filename is None:
         pass
     else:
         plt.savefig(filename, bbox_inches='tight')
     
 if __name__=='__main__':
-    draw_oblate_paper(0.51, 0.3, 0.33, np.radians(37),filename="../integration_bounds.pdf")
+    draw_oblate_paper(0.51, 0.3, 0.33, np.radians(37),filename="..imgs/integration_bounds_poster.pdf")

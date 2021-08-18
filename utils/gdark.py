@@ -12,6 +12,7 @@ from scipy.constants import k as kb
 
 import starry
 from scipy.spatial.transform import Rotation as R
+import matplotlib.pyplot as plt
 starry.config.lazy = False
 starry.config.quiet = True
 
@@ -59,7 +60,7 @@ def flux_spherical(x, y, wav, omega, beta, tpole):
 def plot_precision_long(omegas):
     ref_fluxes = []
     sph_harm_flux = []
-    map0 = starry.Map(ydeg=3)
+    map0 = starry.Map(ydeg=2)
     lat, lon, Y2P, P2Y, Dx, Dy = map0.get_pixel_transforms(oversample=10)
     phi = np.radians(lat)
     theta = np.radians(lon)
@@ -79,7 +80,7 @@ def plot_precision_long(omegas):
         yarr = P2Y.dot(flux)
         p = Y2P.dot(yarr)
         sph_harm_flux.append(p)
-        plt.scatter(lat[lat.argsort()], ((flux-p)/flux)[lat.argsort()], label=r"$\omega=$"+ str(omega))
+        plt.plot(lat[lat.argsort()], ((flux-p)/flux)[lat.argsort()], label=r"$\omega=$"+ str(omega), marker='o')
         
     plt.legend()
     #plt.yscale('log')

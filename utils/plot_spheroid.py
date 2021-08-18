@@ -13,6 +13,10 @@ from scipy.optimize import root
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib import figure
+
+import arviz as az
+import starry
+
 #constants
 G=6.67428e-8
 sigma=5.67040e-5
@@ -93,7 +97,7 @@ def Rp_div_Re(omega):
 
 
 #plot one spheroid with Teff variation across the surface
-def plot_one_spheroid_inc(omega,inc,figname='spheroid.png',cmap=plt.cm.plasma_r):
+def plot_one_spheroid_inc(omega,inc,figname=None,cmap=plt.cm.plasma_r):
     
     n=100
     
@@ -136,14 +140,37 @@ def plot_one_spheroid_inc(omega,inc,figname='spheroid.png',cmap=plt.cm.plasma_r)
         F=(F-Fmin)/(Fmax - Fmin)
 
 
-    fig = plt.figure(figsize=figure.figaspect(1))  # Square figure
+    fig = plt.figure(figsize=plt.figaspect(1))  # Square figure
     ax = fig.add_subplot(111, projection='3d', aspect='equal')
     ax.view_init(elev=inc,azim=0)
     ax.plot_surface(x,y,z,rstride=1,cstride=1,facecolors=cmap(F))
     ax.set_xlim(-1,1)
     ax.set_ylim(-1,1)
     ax.set_zlim(-1,1)
-    ax.set_axis_off()
-    plt.title(r'$\omega$='+str(omega)+', i='+str(inc)+r'$^{\circ}$')
+    #ax.set_axis_off()
+    plt.title(r'$\omega$='+str(omega)+', $i_*='+str(90-inc)+r'^{\circ}$')
     if figname is not None:
         plt.savefig(figname,dpi=300)
+
+def plot_star_withLD(omega=.75, inc=90, u1=0.2,u2=0.2,beta=0.23,tpole=8500,wav=800):
+    """Fig 1 in the paper"""
+    fig = plt.figure(figsize=plt.figaspect(1))  # Square figure
+    ax = fig.add_subplot(111, aspect='equal')
+    ax.set_xlim(-1,1)
+    ax.set_ylim(-1,1)
+    map = starry.Map(udeg=2, gdeg=4, oblate=True) #ydeg = 2*order_approx udeg=2
+    map[1]=u1
+    map[2]=u2
+    map.omega=omega
+    map.beta=beta
+    map.wav=wav
+    map.tpole=tpole
+    map.f = gdark.f(omega)
+    map.inc=inc
+    plt.title(r'$\omega$='+str(omega)+', $i_*='+str(int(map.inc.eval()))+r'^{\circ}$',fontsize=16)
+    map.show(ax=ax)
+    plt.savefig("spheroid_"+str(omega)+"_"+str(int(map.inc.eval()))+".pdf")
+    
+if __name__=='__main__':
+    plot_one_spheroid_inc(omega=0.8,inc=0,figname='../imgs/spheroid_90.pdf',cmap=plt.cm.plasma_r)
+    
